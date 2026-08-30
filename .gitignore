@@ -15,3 +15,6 @@ src-tauri/gen/schemas
 # Локальные веса моделей — их не место в репозитории
 src-tauri/llm/*.gguf
 src-tauri/llm/*.exe
+
+# Побочный продукт генератора превью
+design/__pycache__
