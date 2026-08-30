@@ -17,7 +17,7 @@ pub enum Severity {
 #[derive(Debug, Clone, Serialize)]
 pub struct Issue {
     pub severity: Severity,
-    /// Где найдено: `title` | `description` | `hook` | `tags`.
+    /// Где найдено: `title` | `description` | `tags`.
     pub field: String,
     pub message: String,
     /// Фрагмент, к которому относится замечание.
@@ -83,6 +83,13 @@ static PRICE_IN_TITLE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static BANG_RUN: Lazy<Regex> = Lazy::new(|| Regex::new(r"!{2,}").unwrap());
+
+/// Разогрев в начале описания. Проверяем сам опубликованный текст, а не наш
+/// внутренний срез: в выдаче покупатель видит ровно начало описания.
+static FILLER_OPENING: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)^\s*(?:здравствуйте|добрый\s+(?:день|вечер)|доброе\s+утро|приветствую|привет|(?:предлагаю|представляю)\s+вашему\s+вниманию|вашему\s+вниманию)")
+        .unwrap()
+});
 
 /// Слова целиком в верхнем регистре длиной от 4 символов. Аббревиатуры вроде
 /// «USB» или «LED» короче и под правило не попадают.
@@ -213,27 +220,15 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
         ));
     }
 
-    // Первые ~200 символов — единственное, что видно в поисковой выдаче.
-    let hook = draft.hook.trim();
-    if !hook.is_empty() {
-        let hook_chars = hook.chars().count();
-        if hook_chars > 200 {
-            issues.push(Issue::warning(
-                "hook",
-                format!("хук длиннее 200 символов ({hook_chars}) — в выдаче он оборвётся"),
-                None,
-                "Сократи первое предложение описания до 200 символов, чтобы оно целиком помещалось в поисковую выдачу, и повтори его дословно в поле hook.",
-            ));
-        }
-        let hook_prefix: String = hook.chars().take(40).collect();
-        if !desc.starts_with(&hook_prefix) {
-            issues.push(Issue::warning(
-                "hook",
-                "хук не совпадает с началом описания — в выдаче покупатель увидит другой текст",
-                None,
-                "Сделай так, чтобы описание начиналось ровно с текста хука: первые 200 символов описания должны дословно совпадать с полем hook.",
-            ));
-        }
+    // Первые ~200 символов описания — единственное, что видно в поисковой
+    // выдаче, поэтому тратить их на приветствие расточительно.
+    if let Some(found) = excerpt_of(&FILLER_OPENING, desc) {
+        issues.push(Issue::warning(
+            "description",
+            "описание начинается с разогрева, а в выдаче видны только первые 200 символов",
+            Some(found),
+            "Убери приветствие и вводные слова из начала описания. Первое предложение должно сразу отвечать: что за товар, в каком он состоянии и почему стоит открыть объявление.",
+        ));
     }
 
     if draft.tags.len() > 12 {
@@ -325,11 +320,27 @@ mod tests {
     }
 
     #[test]
-    fn warns_when_hook_does_not_match_description_start() {
+    fn warns_when_description_starts_with_a_greeting() {
+        let d = draft("Стул", "Здравствуйте! Продаю стул из дуба, состояние отличное.");
+        let issues = check(&d, &cfg());
+        assert!(
+            issues.iter().any(|i| i.message.contains("разогрева")),
+            "разогрев в начале описания не пойман: {issues:?}"
+        );
+    }
+
+    /// Хук — производная от описания, а не поле Авито, поэтому правил
+    /// про него быть не должно: пользователь всё равно не смог бы их
+    /// выполнить, а предупреждение висело бы вечно.
+    #[test]
+    fn hook_is_never_a_source_of_findings() {
         let mut d = draft("Стул", "Продаю стул из дуба, состояние отличное.");
         d.hook = "Совершенно другой текст в качестве хука для выдачи".into();
         let issues = check(&d, &cfg());
-        assert!(issues.iter().any(|i| i.field == "hook"));
+        assert!(
+            !issues.iter().any(|i| i.field == "hook"),
+            "линтер всё ещё придирается к хуку: {issues:?}"
+        );
     }
 
     /// Кнопка «Исправить» в интерфейсе отправляет модели `fix` как есть,

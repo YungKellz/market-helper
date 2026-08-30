@@ -82,7 +82,6 @@ pub fn copy_system(cfg: &AppConfig, opts: &GenerateOptions) -> String {
 Отвечай ТОЛЬКО валидным JSON без markdown-обёртки:
 {{
   "title": "заголовок до 100 символов",
-  "hook": "первые 200 символов описания, дословно совпадают с началом description",
   "description": "полный текст, готовый к вставке в поле «Описание»",
   "tags": [{tags}]
 }}"#,

@@ -47,7 +47,11 @@ export default function App() {
   const [attributes, setAttributes] = useState<UserAttributes>(emptyAttributes);
   const [options, setOptions] = useState<GenerateOptions>(defaultOptions);
 
-  const [result, setResult] = useState<ListingResult | null>(null);
+  // История вариантов: неудачная перегенерация не должна стирать удачную.
+  const [history, setHistory] = useState<ListingResult[]>([]);
+  const [cursor, setCursor] = useState(-1);
+  const result = cursor >= 0 ? (history[cursor] ?? null) : null;
+
   const [stream, setStream] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +79,17 @@ export default function App() {
       .then((s) => setWizardOpen(s.needs_setup))
       .catch((e) => setError(errorText(e)));
   }, [refreshStatuses, refreshSetup]);
+
+  function pushResult(next: ListingResult) {
+    // Новый вариант обрезает «будущее»: если пользователь отлистал назад
+    // и сгенерировал заново, ветка вперёд теряет смысл.
+    setHistory((prev) => [...prev.slice(0, cursor + 1), next]);
+    setCursor(cursor + 1);
+  }
+
+  function updateAt(index: number, patch: Partial<ListingResult>) {
+    setHistory((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
 
   async function withStream<T>(kind: Busy, run: () => Promise<T>): Promise<T | null> {
     setBusy(kind);
@@ -112,7 +127,7 @@ export default function App() {
       ...emptyFactsFromAttributes(attributes),
     };
     const next = await withStream("generate", () => generateListing(source, attributes, options));
-    if (next) setResult(next);
+    if (next) pushResult(next);
   }
 
   async function refine(instruction: string) {
@@ -129,41 +144,37 @@ export default function App() {
         options,
       ),
     );
-    if (next) setResult(next);
+    if (next) pushResult(next);
   }
 
   // Ручные правки в текстовых полях тоже должны переприменять проверки Авито,
   // но дёргать Rust на каждое нажатие клавиши незачем.
-  const latestResult = useRef<ListingResult | null>(null);
-  useEffect(() => {
-    latestResult.current = result;
-  }, [result]);
-
   const lintTimer = useRef<number | null>(null);
   function patchDraft(patch: { title?: string; description?: string }) {
-    setResult((prev) => (prev ? { ...prev, ...patch } : prev));
-    if (lintTimer.current !== null) window.clearTimeout(lintTimer.current);
+    const index = cursor;
+    const base = history[index];
+    if (!base) return;
 
+    const updated = { ...base, ...patch };
+    // Хук — производная от описания, держим её в согласованном виде и здесь.
+    updated.hook = updated.description.slice(0, 200);
+    updateAt(index, { ...patch, hook: updated.hook });
+
+    // Каждое нажатие клавиши отменяет прошлый таймер, поэтому до Rust
+    // доедет только последняя редакция — гонки за отставший ответ нет.
+    if (lintTimer.current !== null) window.clearTimeout(lintTimer.current);
     lintTimer.current = window.setTimeout(async () => {
-      const current = latestResult.current;
-      if (!current) return;
       const checked = await lintListing({
-        title: current.title,
-        hook: current.hook,
-        description: current.description,
-        tags: current.tags,
+        title: updated.title,
+        hook: updated.hook,
+        description: updated.description,
+        tags: updated.tags,
       });
-      // Берём только вычисленные поля: текст мог уйти вперёд, пока ждали ответ.
-      setResult((prev) =>
-        prev
-          ? {
-              ...prev,
-              title_chars: checked.title_chars,
-              description_chars: checked.description_chars,
-              issues: checked.issues,
-            }
-          : prev,
-      );
+      updateAt(index, {
+        title_chars: checked.title_chars,
+        description_chars: checked.description_chars,
+        issues: checked.issues,
+      });
     }, 400);
   }
 
@@ -248,6 +259,11 @@ export default function App() {
             result={result}
             stream={stream}
             busy={busy === "generate"}
+            historyIndex={cursor}
+            historyTotal={history.length}
+            onNavigate={(delta) =>
+              setCursor((c) => Math.min(history.length - 1, Math.max(0, c + delta)))
+            }
             onDraftChange={patchDraft}
             onRefine={refine}
           />

@@ -110,6 +110,7 @@ export interface GenerateOptions {
 
 export interface ListingDraft {
   title: string;
+  /** Первые 200 символов описания. Производная, а не поле Авито. */
   hook: string;
   description: string;
   tags: string[];

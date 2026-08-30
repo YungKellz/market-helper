@@ -6,6 +6,10 @@ interface Props {
   result: ListingResult | null;
   stream: string;
   busy: boolean;
+  /** Позиция текущего варианта в истории и общее число вариантов. */
+  historyIndex: number;
+  historyTotal: number;
+  onNavigate: (delta: number) => void;
   onDraftChange: (patch: { title?: string; description?: string }) => void;
   onRefine: (instruction: string) => void;
 }
@@ -31,7 +35,16 @@ function Counter({ value, limit }: { value: number; limit: number }) {
   );
 }
 
-export default function ResultPanel({ result, stream, busy, onDraftChange, onRefine }: Props) {
+export default function ResultPanel({
+  result,
+  stream,
+  busy,
+  historyIndex,
+  historyTotal,
+  onNavigate,
+  onDraftChange,
+  onRefine,
+}: Props) {
   const [instruction, setInstruction] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -74,6 +87,28 @@ export default function ResultPanel({ result, stream, busy, onDraftChange, onRef
 
   return (
     <>
+      {historyTotal > 1 && (
+        <div className="history-bar">
+          <button
+            className="ghost"
+            onClick={() => onNavigate(-1)}
+            disabled={busy || historyIndex <= 0}
+          >
+            ← Предыдущий
+          </button>
+          <span className="counter">
+            Вариант {historyIndex + 1} из {historyTotal}
+          </span>
+          <button
+            className="ghost"
+            onClick={() => onNavigate(1)}
+            disabled={busy || historyIndex >= historyTotal - 1}
+          >
+            Следующий →
+          </button>
+        </div>
+      )}
+
       <section className="section">
         <header>
           <span className="step">4</span>

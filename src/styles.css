@@ -597,3 +597,16 @@ button.ghost.fix {
   padding: 3px 10px;
   font-size: 12px;
 }
+
+/* Переключатель вариантов: неудачная перегенерация не должна стирать удачную. */
+.history-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  flex: none;
+}

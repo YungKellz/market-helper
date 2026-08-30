@@ -182,12 +182,10 @@ fn finish(raw: String, cfg: &AppConfig, backend_kind: &str) -> AppResult<Listing
     let mut draft: ListingDraft = parse_json(&raw)?;
     draft.title = draft.title.trim().to_string();
     draft.description = draft.description.trim().to_string();
-    draft.hook = draft.hook.trim().to_string();
-
-    // Модель нередко возвращает пустой hook, хотя текст в описании уже есть.
-    if draft.hook.is_empty() && !draft.description.is_empty() {
-        draft.hook = draft.description.chars().take(200).collect();
-    }
+    // Хук — не поле Авито, а наш внутренний срез: покупатель в выдаче видит
+    // ровно начало описания. Поэтому не спрашиваем его у модели (та всё равно
+    // пересказывала своими словами), а вычисляем.
+    draft.hook = draft.description.chars().take(200).collect();
     draft.tags.retain(|t| !t.trim().is_empty());
 
     let issues = lint::check(&draft, &cfg.generation);
