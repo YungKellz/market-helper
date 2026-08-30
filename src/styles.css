@@ -474,3 +474,92 @@ label.check input {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* --- мастер первого запуска --- */
+
+.wizard {
+  width: min(560px, 100%);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wstep {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.wstep.running {
+  border-color: var(--accent);
+}
+
+.wstep.done {
+  opacity: 0.65;
+}
+
+.wstep-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.wstep.done .wstep-mark {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.wstep.running .wstep-mark {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wstep-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.progress {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+/* Шаги без измеримого прогресса — winget и запуск сервиса. */
+.progress-fill.indeterminate {
+  width: 35%;
+  animation: slide 1.2s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}

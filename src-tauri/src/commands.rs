@@ -215,3 +215,21 @@ pub fn lint_listing(state: State<'_, AppState>, draft: ListingDraft) -> ListingR
         draft,
     }
 }
+
+/// Что ещё нужно доустановить, чтобы приложение заработало.
+#[tauri::command]
+pub async fn setup_status(state: State<'_, AppState>) -> AppResult<crate::setup::SetupStatus> {
+    let cfg = state.config();
+    Ok(crate::setup::status(&state.llm, &cfg).await)
+}
+
+#[tauri::command]
+pub async fn install_ollama(app: AppHandle) -> AppResult<()> {
+    crate::setup::install_ollama(&app).await
+}
+
+#[tauri::command]
+pub async fn start_ollama(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let cfg = state.config();
+    crate::setup::start_ollama(&app, &state.llm, &cfg).await
+}

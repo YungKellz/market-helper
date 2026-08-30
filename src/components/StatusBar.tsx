@@ -14,11 +14,21 @@ function dotClass(s: BackendStatus): string {
 interface Props {
   statuses: BackendStatus[];
   busy: boolean;
+  /** Движок или модель ещё не установлены — предлагаем вернуться в мастер. */
+  needsSetup: boolean;
+  onOpenSetup: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
 }
 
-export default function StatusBar({ statuses, busy, onRefresh, onOpenSettings }: Props) {
+export default function StatusBar({
+  statuses,
+  busy,
+  needsSetup,
+  onOpenSetup,
+  onRefresh,
+  onOpenSettings,
+}: Props) {
   return (
     <div className="topbar">
       <h1>Market Helper</h1>
@@ -32,6 +42,12 @@ export default function StatusBar({ statuses, busy, onRefresh, onOpenSettings }:
           {s.version ? ` ${s.version}` : ""}
         </span>
       ))}
+
+      {needsSetup && (
+        <button className="primary" onClick={onOpenSetup} disabled={busy}>
+          Завершить установку
+        </button>
+      )}
 
       <button className="ghost" onClick={onRefresh} disabled={busy} title="Проверить бэкенды заново">
         Обновить

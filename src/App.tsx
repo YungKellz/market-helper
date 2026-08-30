@@ -10,12 +10,14 @@ import {
   onToken,
   refineListing,
   saveConfig,
+  setupStatus,
 } from "./api";
 import AttributesForm from "./components/AttributesForm";
 import FactsPanel from "./components/FactsPanel";
 import PhotoPanel from "./components/PhotoPanel";
 import ResultPanel from "./components/ResultPanel";
 import SettingsDialog from "./components/SettingsDialog";
+import SetupWizard from "./components/SetupWizard";
 import StatusBar from "./components/StatusBar";
 import {
   defaultOptions,
@@ -26,6 +28,7 @@ import {
   type ListingResult,
   type PhotoInfo,
   type ProductFacts,
+  type SetupStatus,
   type UserAttributes,
 } from "./types";
 
@@ -35,6 +38,8 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [statuses, setStatuses] = useState<BackendStatus[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [setup, setSetup] = useState<SetupStatus | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const [photos, setPhotos] = useState<PhotoInfo[]>([]);
   const [hint, setHint] = useState("");
@@ -55,10 +60,21 @@ export default function App() {
     }
   }, []);
 
+  const refreshSetup = useCallback(async () => {
+    const next = await setupStatus();
+    setSetup(next);
+    return next;
+  }, []);
+
   useEffect(() => {
     getConfig().then(setConfig).catch((e) => setError(errorText(e)));
     void refreshStatuses();
-  }, [refreshStatuses]);
+    // Мастер открывается сам, если движка или модели ещё нет: без них
+    // приложение всё равно ничего не сгенерирует.
+    refreshSetup()
+      .then((s) => setWizardOpen(s.needs_setup))
+      .catch((e) => setError(errorText(e)));
+  }, [refreshStatuses, refreshSetup]);
 
   async function withStream<T>(kind: Busy, run: () => Promise<T>): Promise<T | null> {
     setBusy(kind);
@@ -170,7 +186,12 @@ export default function App() {
       <StatusBar
         statuses={statuses}
         busy={busy !== null}
-        onRefresh={refreshStatuses}
+        needsSetup={setup?.needs_setup ?? false}
+        onOpenSetup={() => setWizardOpen(true)}
+        onRefresh={() => {
+          void refreshStatuses();
+          void refreshSetup();
+        }}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -222,6 +243,18 @@ export default function App() {
           />
         </div>
       </div>
+
+      {wizardOpen && setup && (
+        <SetupWizard
+          status={setup}
+          onReady={() => {
+            setWizardOpen(false);
+            void refreshStatuses();
+            void refreshSetup();
+          }}
+          onSkip={() => setWizardOpen(false)}
+        />
+      )}
 
       {settingsOpen && config && (
         <SettingsDialog

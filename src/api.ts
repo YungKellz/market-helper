@@ -10,6 +10,8 @@ import type {
   ListingResult,
   PhotoInfo,
   ProductFacts,
+  SetupProgress,
+  SetupStatus,
   UserAttributes,
 } from "./types";
 
@@ -68,3 +70,13 @@ export function errorText(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
 }
+
+export const setupStatus = () => invoke<SetupStatus>("setup_status");
+
+export const installOllama = () => invoke<void>("install_ollama");
+
+export const startOllama = () => invoke<void>("start_ollama");
+
+/** Ход мастера первого запуска. */
+export const onSetupProgress = (handler: (p: SetupProgress) => void): Promise<UnlistenFn> =>
+  listen<SetupProgress>("setup:progress", (e) => handler(e.payload));

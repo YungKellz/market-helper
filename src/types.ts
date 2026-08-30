@@ -170,3 +170,20 @@ export const defaultOptions = (): GenerateOptions => ({
   include_tags: true,
   disclose_defects: true,
 });
+
+export interface SetupStatus {
+  ollama_installed: boolean;
+  ollama_running: boolean;
+  model_ready: boolean;
+  model: string;
+  winget_available: boolean;
+  needs_setup: boolean;
+}
+
+export interface SetupProgress {
+  /** `install` | `start` | `model` */
+  step: string;
+  message: string;
+  percent: number | null;
+  done: boolean;
+}

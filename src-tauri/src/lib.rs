@@ -4,6 +4,7 @@ mod error;
 mod imaging;
 mod llm;
 mod pipeline;
+mod setup;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -43,6 +44,9 @@ pub fn run() {
             commands::generate_listing,
             commands::refine_listing,
             commands::lint_listing,
+            commands::setup_status,
+            commands::install_ollama,
+            commands::start_ollama,
         ])
         .on_window_event(|window, event| {
             // Иначе встроенный llama-server переживёт закрытие окна и продолжит
