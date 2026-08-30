@@ -1,0 +1,3 @@
+# pnpm 11 requires explicit approval for dependency postinstall scripts.
+allowBuilds:
+  esbuild: true

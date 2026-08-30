@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust
+src-tauri/target
+src-tauri/gen/schemas
+
+# IDE
+.idea
+.DS_Store
+*.log
+
+# Локальные веса моделей — их не место в репозитории
+src-tauri/llm/*.gguf
+src-tauri/llm/*.exe
