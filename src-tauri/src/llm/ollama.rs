@@ -48,6 +48,25 @@ struct ChunkMessage {
     thinking: String,
 }
 
+/// Ollama 0.33 с reasoning-моделями кладёт ответ то в `content`, то в
+/// `thinking`, причём в `content` может упасть один осиротевший перевод
+/// строки. Выбираем поле, где действительно лежит ответ.
+fn pick_answer(content: String, thinking: String, json_mode: bool) -> String {
+    if json_mode {
+        if content.contains('{') {
+            return content;
+        }
+        if thinking.contains('{') {
+            return thinking;
+        }
+    }
+    if content.trim().is_empty() {
+        thinking
+    } else {
+        content
+    }
+}
+
 impl OllamaBackend {
     pub fn new(cfg: OllamaConfig) -> Self {
         let http = reqwest::Client::builder()
@@ -205,7 +224,7 @@ impl OllamaBackend {
         }
         Ok(chunk
             .message
-            .map(|m| if m.content.is_empty() { m.thinking } else { m.content })
+            .map(|m| pick_answer(m.content, m.thinking, req.json_mode))
             .unwrap_or_default())
     }
 
@@ -256,11 +275,11 @@ impl OllamaBackend {
                     }
                 }
                 if chunk.done {
-                    return Ok(if content.is_empty() { thinking } else { content });
+                    return Ok(pick_answer(content, thinking, req.json_mode));
                 }
             }
         }
-        Ok(if content.is_empty() { thinking } else { content })
+        Ok(pick_answer(content, thinking, req.json_mode))
     }
 
     /// Скачивание модели с прогрессом. Сырые строки прогресса уходят в `sink`.

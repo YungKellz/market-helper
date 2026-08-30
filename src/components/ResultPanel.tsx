@@ -41,6 +41,14 @@ export default function ResultPanel({ result, stream, busy, onDraftChange, onRef
     setTimeout(() => setCopied(null), 1500);
   }
 
+  // Разные правила часто дают одну и ту же инструкцию — дедуплицируем,
+  // иначе модель получит один и тот же приказ несколько раз подряд.
+  function fixAll() {
+    if (!result) return;
+    const unique = Array.from(new Set(result.issues.map((i) => i.fix).filter(Boolean)));
+    if (unique.length > 0) onRefine(unique.join(" "));
+  }
+
   if (!result) {
     return (
       <section className="section" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -132,6 +140,11 @@ export default function ResultPanel({ result, stream, busy, onDraftChange, onRef
           <span className="counter">
             {errors.length} ошибок · {warnings.length} замечаний
           </span>
+          {result.issues.length > 1 && (
+            <button className="ghost" onClick={fixAll} disabled={busy}>
+              Исправить всё
+            </button>
+          )}
         </header>
         {result.issues.length === 0 ? (
           <p className="hint" style={{ margin: 0 }}>
@@ -143,15 +156,27 @@ export default function ResultPanel({ result, stream, busy, onDraftChange, onRef
             {[...errors, ...warnings].map((issue, i) => (
               <div className={`issue ${issue.severity}`} key={i}>
                 <span className={`dot ${issue.severity === "error" ? "err" : "warn"}`} />
-                <span>
-                  <b>{SEVERITY_LABEL[issue.severity]}.</b> {issue.message}
-                  {issue.excerpt && (
-                    <>
-                      {" "}
-                      <code>«{issue.excerpt}»</code>
-                    </>
+                <div className="issue-body">
+                  <span>
+                    <b>{SEVERITY_LABEL[issue.severity]}.</b> {issue.message}
+                    {issue.excerpt && (
+                      <>
+                        {" "}
+                        <code>«{issue.excerpt}»</code>
+                      </>
+                    )}
+                  </span>
+                  {issue.fix && (
+                    <button
+                      className="ghost fix"
+                      onClick={() => onRefine(issue.fix)}
+                      disabled={busy}
+                      title={issue.fix}
+                    >
+                      Исправить
+                    </button>
                   )}
-                </span>
+                </div>
               </div>
             ))}
           </div>

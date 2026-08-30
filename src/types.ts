@@ -120,6 +120,8 @@ export interface Issue {
   field: string;
   message: string;
   excerpt: string | null;
+  /** Готовая инструкция модели для кнопки «Исправить». */
+  fix: string;
 }
 
 export interface ListingResult extends ListingDraft {

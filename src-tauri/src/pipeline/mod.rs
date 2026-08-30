@@ -128,8 +128,7 @@ pub async fn generate_listing(
     .json()
     .no_thinking();
 
-    let raw = backend.chat_stream(&req, sink).await?;
-    finish(raw, cfg, backend.kind())
+    stream_and_parse(backend, cfg, req, sink).await
 }
 
 /// Точечная правка готового текста по инструкции пользователя.
@@ -150,12 +149,33 @@ pub async fn refine_listing(
         ],
     )
     .sampling(cfg.generation.temperature, cfg.generation.top_p)
-    .max_tokens(2600)
+    // Переделка дороже первой генерации: модель держит в контексте весь
+    // прежний текст и обязана выдать его заново целиком.
+    .max_tokens(3072)
     .json()
     .no_thinking();
 
+    stream_and_parse(backend, cfg, req, sink).await
+}
+
+/// Локальная 8B изредка обрывает JSON на полуслове, упёршись в лимит токенов.
+/// Одна повторная попытка с увеличенным лимитом дешевле, чем ошибка в лицо
+/// пользователю; наружу отдаём исходную ошибку, она информативнее.
+async fn stream_and_parse(
+    backend: &Backend,
+    cfg: &AppConfig,
+    req: ChatRequest,
+    sink: &TokenSink,
+) -> AppResult<ListingResult> {
     let raw = backend.chat_stream(&req, sink).await?;
-    finish(raw, cfg, backend.kind())
+    let first = match finish(raw, cfg, backend.kind()) {
+        Ok(result) => return Ok(result),
+        Err(e) => e,
+    };
+
+    let retry = req.clone().max_tokens(req.max_tokens + 1024);
+    let raw = backend.chat_stream(&retry, sink).await?;
+    finish(raw, cfg, backend.kind()).map_err(|_| first)
 }
 
 fn finish(raw: String, cfg: &AppConfig, backend_kind: &str) -> AppResult<ListingResult> {
@@ -294,5 +314,49 @@ mod tests {
         assert!(!result.draft.title.trim().is_empty(), "пустой заголовок");
         assert!(result.description_chars > 100, "описание подозрительно короткое");
         assert!(streamed > 0, "в поток не пришло ни одного символа");
+    }
+
+    /// Переделка готового текста — тот же потоковый путь, но с другим промптом.
+    #[tokio::test]
+    async fn live_refine_rewrites_listing() {
+        let cfg = AppConfig::default();
+        let service = crate::llm::LlmService::new(None);
+        if !service.ollama(&cfg).status().await.available {
+            eprintln!("Ollama не запущена — живой тест пропущен");
+            return;
+        }
+
+        let current = ListingDraft {
+            title: "Спрей Simple Line анти пыль 500 мл дозатор".into(),
+            hook: "Спрей-дозатор 500 мл, белый корпус.".into(),
+            description: "Спрей-дозатор 500 мл, белый корпус с надписью Simple Line.                           Антипыльное средство для уборки, удаляет пыль и загрязнения.                           Хорошее состояние: царапины на корпусе, но функционал работает                           безупречно. Доставка через Авито Доставку."
+                .into(),
+            tags: vec!["спрей анти пыль".into()],
+        };
+
+        let backend = service.resolve(&cfg).await.expect("бэкенд недоступен");
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+
+        let result = refine_listing(
+            &backend,
+            &cfg,
+            &current,
+            "Смени тон на более деловой",
+            &GenerateOptions::default(),
+            &tx,
+        )
+        .await
+        .expect("переделка провалилась");
+
+        eprintln!(
+            "заголовок: {}
+описание ({} символов): {}",
+            result.draft.title, result.description_chars, result.draft.description
+        );
+        assert!(!result.draft.description.trim().is_empty(), "пустое описание");
+        assert_ne!(
+            result.draft.description, current.description,
+            "текст не изменился после переделки"
+        );
     }
 }

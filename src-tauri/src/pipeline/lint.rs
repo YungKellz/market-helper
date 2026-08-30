@@ -22,15 +22,30 @@ pub struct Issue {
     pub message: String,
     /// Фрагмент, к которому относится замечание.
     pub excerpt: Option<String>,
+    /// Готовая инструкция модели для кнопки «Исправить». Живёт рядом с самим
+    /// правилом: кто знает о нарушении, тот знает и как его чинить.
+    pub fix: String,
 }
 
 impl Issue {
-    fn error(field: &str, message: impl Into<String>, excerpt: Option<String>) -> Self {
-        Self { severity: Severity::Error, field: field.into(), message: message.into(), excerpt }
+    fn error(field: &str, message: impl Into<String>, excerpt: Option<String>, fix: &str) -> Self {
+        Self {
+            severity: Severity::Error,
+            field: field.into(),
+            message: message.into(),
+            excerpt,
+            fix: fix.into(),
+        }
     }
 
-    fn warning(field: &str, message: impl Into<String>, excerpt: Option<String>) -> Self {
-        Self { severity: Severity::Warning, field: field.into(), message: message.into(), excerpt }
+    fn warning(field: &str, message: impl Into<String>, excerpt: Option<String>, fix: &str) -> Self {
+        Self {
+            severity: Severity::Warning,
+            field: field.into(),
+            message: message.into(),
+            excerpt,
+            fix: fix.into(),
+        }
     }
 }
 
@@ -71,8 +86,13 @@ static BANG_RUN: Lazy<Regex> = Lazy::new(|| Regex::new(r"!{2,}").unwrap());
 
 /// Слова целиком в верхнем регистре длиной от 4 символов. Аббревиатуры вроде
 /// «USB» или «LED» короче и под правило не попадают.
-static SHOUTING: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b[А-ЯЁA-Z]{4,}\b").unwrap());
+static SHOUTING: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b[А-ЯЁA-Z]{4,}\b").unwrap());
+
+const FIX_CONTACTS: &str = "Удали из текста любые контактные данные: номера телефонов, e-mail, ссылки, адреса сайтов и ники в мессенджерах. Авито запрещает их в объявлении.";
+const FIX_PLATFORMS: &str = "Убери упоминания других торговых площадок и маркетплейсов.";
+const FIX_SUPERLATIVES: &str = "Замени необоснованные превосходные степени вроде «самый дешёвый» на проверяемые факты о товаре.";
+const FIX_SHOUTING: &str = "Перепиши слова, написанные целиком заглавными буквами, обычным регистром.";
+const FIX_BANGS: &str = "Оставь не больше одного восклицательного знака подряд.";
 
 fn excerpt_of(re: &Regex, text: &str) -> Option<String> {
     re.find(text).map(|m| m.as_str().trim().to_string())
@@ -95,7 +115,7 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
     for (field, text) in [("title", title), ("description", desc)] {
         for (re, message) in contact_rules {
             if let Some(found) = excerpt_of(re, text) {
-                issues.push(Issue::error(field, message, Some(found)));
+                issues.push(Issue::error(field, message, Some(found), FIX_CONTACTS));
             }
         }
         if let Some(found) = excerpt_of(&OTHER_PLATFORMS, text) {
@@ -103,6 +123,7 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 field,
                 "упоминание другой торговой площадки — модерация Авито это снимает",
                 Some(found),
+                FIX_PLATFORMS,
             ));
         }
         if let Some(found) = excerpt_of(&SUPERLATIVES, text) {
@@ -110,6 +131,7 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 field,
                 "необоснованная превосходная степень: снижает доверие и попадает под правила о недостоверной рекламе",
                 Some(found),
+                FIX_SUPERLATIVES,
             ));
         }
         if let Some(found) = excerpt_of(&SHOUTING, text) {
@@ -117,21 +139,33 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 field,
                 "слово целиком капсом — Авито считает это привлечением внимания",
                 Some(found),
+                FIX_SHOUTING,
             ));
         }
         if let Some(found) = excerpt_of(&BANG_RUN, text) {
-            issues.push(Issue::warning(field, "несколько восклицательных знаков подряд", Some(found)));
+            issues.push(Issue::warning(
+                field,
+                "несколько восклицательных знаков подряд",
+                Some(found),
+                FIX_BANGS,
+            ));
         }
     }
 
     let title_chars = title.chars().count();
     if title_chars == 0 {
-        issues.push(Issue::error("title", "заголовок пустой", None));
+        issues.push(Issue::error(
+            "title",
+            "заголовок пустой",
+            None,
+            "Придумай заголовок: тип товара, бренд, модель и один-два ключевых параметра.",
+        ));
     } else if title_chars > 100 {
         issues.push(Issue::error(
             "title",
             format!("заголовок длиннее 100 символов ({title_chars}) — Авито его обрежет"),
             None,
+            "Сократи заголовок до 100 символов: оставь только тип товара, бренд, модель и один-два ключевых параметра.",
         ));
     }
     if let Some(found) = excerpt_of(&PRICE_IN_TITLE, title) {
@@ -139,12 +173,18 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
             "title",
             "цена в заголовке запрещена — для неё есть отдельное поле",
             Some(found),
+            "Убери цену из заголовка — на Авито для неё отдельное поле.",
         ));
     }
 
     let desc_chars = desc.chars().count();
     if desc_chars == 0 {
-        issues.push(Issue::error("description", "описание пустое", None));
+        issues.push(Issue::error(
+            "description",
+            "описание пустое",
+            None,
+            "Напиши описание по структуре из системного сообщения.",
+        ));
     } else if desc_chars < cfg.target_chars_min as usize {
         issues.push(Issue::warning(
             "description",
@@ -153,6 +193,10 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 cfg.target_chars_min
             ),
             None,
+            &format!(
+                "Расширь описание до {}–{} символов: добавь конкретики о состоянии, комплектности и выгоде для покупателя. Не выдумывай фактов, которых нет в тексте.",
+                cfg.target_chars_min, cfg.target_chars_max
+            ),
         ));
     } else if desc_chars > cfg.target_chars_max as usize {
         issues.push(Issue::warning(
@@ -162,6 +206,10 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 cfg.target_chars_max
             ),
             None,
+            &format!(
+                "Сократи описание до {} символов, убрав повторы и общие фразы. Факты и цифры сохрани.",
+                cfg.target_chars_max
+            ),
         ));
     }
 
@@ -174,6 +222,7 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 "hook",
                 format!("хук длиннее 200 символов ({hook_chars}) — в выдаче он оборвётся"),
                 None,
+                "Сократи первое предложение описания до 200 символов, чтобы оно целиком помещалось в поисковую выдачу, и повтори его дословно в поле hook.",
             ));
         }
         let hook_prefix: String = hook.chars().take(40).collect();
@@ -182,6 +231,7 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
                 "hook",
                 "хук не совпадает с началом описания — в выдаче покупатель увидит другой текст",
                 None,
+                "Сделай так, чтобы описание начиналось ровно с текста хука: первые 200 символов описания должны дословно совпадать с полем hook.",
             ));
         }
     }
@@ -191,6 +241,7 @@ pub fn check(draft: &ListingDraft, cfg: &GenerationConfig) -> Vec<Issue> {
             "tags",
             format!("{} ключевых фраз — переизбыток тегов ведёт к пессимизации", draft.tags.len()),
             None,
+            "Оставь не больше десяти поисковых фраз — самых частотных.",
         ));
     }
 
@@ -279,5 +330,27 @@ mod tests {
         d.hook = "Совершенно другой текст в качестве хука для выдачи".into();
         let issues = check(&d, &cfg());
         assert!(issues.iter().any(|i| i.field == "hook"));
+    }
+
+    /// Кнопка «Исправить» в интерфейсе отправляет модели `fix` как есть,
+    /// поэтому пустая инструкция означала бы мёртвую кнопку.
+    #[test]
+    fn every_issue_carries_a_fix_instruction() {
+        let mut d = draft(
+            "СРОЧНО продам диван 25 000 руб",
+            "Звоните 89991234567, пишите в телеграм. Самая низкая цена!! Смотрите на example.ru и на озоне.",
+        );
+        d.hook = "Хук, не совпадающий с началом описания, специально длинный".into();
+        d.tags = (0..15).map(|i| format!("фраза {i}")).collect();
+
+        let issues = check(&d, &cfg());
+        assert!(issues.len() > 8, "правила не сработали: {issues:?}");
+        for issue in &issues {
+            assert!(
+                !issue.fix.trim().is_empty(),
+                "у правила «{}» нет инструкции для исправления",
+                issue.message
+            );
+        }
     }
 }

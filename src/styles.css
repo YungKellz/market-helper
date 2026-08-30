@@ -563,3 +563,37 @@ label.check input {
     transform: translateX(320%);
   }
 }
+
+/* Полоса ошибки под шапкой — всегда на виду, независимо от прокрутки колонок. */
+.banner-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-radius: 0;
+  border-width: 0 0 1px 0;
+  flex: none;
+}
+
+.banner-top span {
+  flex: 1;
+}
+
+.issue-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.issue-body > span {
+  flex: 1;
+}
+
+button.ghost.fix {
+  flex: none;
+  border-color: var(--border-strong);
+  color: var(--text);
+  padding: 3px 10px;
+  font-size: 12px;
+}

@@ -195,10 +195,20 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
+      {/* Полосой во всю ширину, а не внутри колонки: раньше баннер жил над
+          блоком с фото и при прокрутке уезжал из виду — сбой генерации
+          выглядел как «ничего не произошло». */}
+      {error && (
+        <div className="banner banner-top">
+          <span>{error}</span>
+          <button className="ghost" onClick={() => setError(null)} title="Скрыть">
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="columns">
         <div className="column">
-          {error && <div className="banner">{error}</div>}
-
           <PhotoPanel
             photos={photos}
             onChange={setPhotos}
