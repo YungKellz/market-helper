@@ -13,6 +13,12 @@ use crate::pipeline::schema::{
 /// Локальные модели любят обернуть JSON в ```json-блок или добавить фразу
 /// «Вот результат:». Вырезаем первый сбалансированный объект.
 fn extract_json(raw: &str) -> AppResult<&str> {
+    if raw.trim().is_empty() {
+        return Err(AppError::BadModelOutput(
+            "модель вернула пустой ответ. Обычно это значит, что лимит токенов              закончился раньше, чем она добралась до ответа — попробуйте ещё раз              или возьмите модель полегче в настройках"
+                .into(),
+        ));
+    }
     let bytes = raw.as_bytes();
     let start = raw
         .find('{')
@@ -86,8 +92,11 @@ pub async fn analyze_photos(
     )
     // Распознавание — задача на точность, а не на творчество.
     .sampling(0.15, 0.9)
-    .max_tokens(900)
-    .json();
+    // С отключёнными размышлениями ответ по схеме укладывается в ~200 токенов,
+    // остальное — запас на многословную модель.
+    .max_tokens(2048)
+    .json()
+    .no_thinking();
 
     let raw = backend.chat(&req).await?;
     let mut facts: ProductFacts = parse_json(&raw)?;
@@ -115,8 +124,9 @@ pub async fn generate_listing(
     .sampling(cfg.generation.temperature, cfg.generation.top_p)
     // ~1500 символов кириллицы это ориентировочно 700–900 токенов; запас нужен
     // на заголовок, теги и JSON-обвязку.
-    .max_tokens(1800)
-    .json();
+    .max_tokens(2600)
+    .json()
+    .no_thinking();
 
     let raw = backend.chat_stream(&req, sink).await?;
     finish(raw, cfg, backend.kind())
@@ -140,8 +150,9 @@ pub async fn refine_listing(
         ],
     )
     .sampling(cfg.generation.temperature, cfg.generation.top_p)
-    .max_tokens(1800)
-    .json();
+    .max_tokens(2600)
+    .json()
+    .no_thinking();
 
     let raw = backend.chat_stream(&req, sink).await?;
     finish(raw, cfg, backend.kind())
@@ -188,5 +199,100 @@ mod tests {
     #[test]
     fn fails_on_output_without_json() {
         assert!(extract_json("модель отказалась отвечать").is_err());
+    }
+
+    #[test]
+    fn empty_output_explains_itself() {
+        let err = extract_json("   ").unwrap_err().to_string();
+        assert!(err.contains("пустой ответ"), "невнятная ошибка: {err}");
+    }
+
+    /// Полный путь «файл на диске → факты о товаре» против живой Ollama.
+    /// Путь к картинке задаётся через MARKET_HELPER_TEST_IMAGE; без него
+    /// и без запущенной Ollama тест молча проходит.
+    #[tokio::test]
+    async fn live_vision_pipeline_produces_facts() {
+        let Ok(image_path) = std::env::var("MARKET_HELPER_TEST_IMAGE") else {
+            eprintln!("MARKET_HELPER_TEST_IMAGE не задан — живой тест пропущен");
+            return;
+        };
+
+        let cfg = AppConfig::default();
+        let service = crate::llm::LlmService::new(None);
+        if !service.ollama(&cfg).status().await.available {
+            eprintln!("Ollama не запущена — живой тест пропущен");
+            return;
+        }
+
+        let prepared = crate::imaging::prepare_from_path(
+            std::path::Path::new(&image_path),
+            cfg.generation.image_max_side,
+            cfg.generation.image_jpeg_quality,
+        )
+        .expect("не удалось подготовить изображение");
+
+        let backend = service.resolve(&cfg).await.expect("бэкенд недоступен");
+        let facts = analyze_photos(&backend, &cfg, vec![prepared.b64], "")
+            .await
+            .expect("распознавание провалилось");
+
+        eprintln!("распознано: {facts:?}");
+        assert!(
+            !facts.product_type.trim().is_empty() || !facts.category.trim().is_empty(),
+            "модель не заполнила ни тип товара, ни категорию"
+        );
+    }
+
+    /// Копирайтинг идёт по отдельному, потоковому пути — а именно там ответ
+    /// и уезжал в поле thinking. Проверяем его живьём отдельно.
+    #[tokio::test]
+    async fn live_copy_stage_produces_listing() {
+        let cfg = AppConfig::default();
+        let service = crate::llm::LlmService::new(None);
+        if !service.ollama(&cfg).status().await.available {
+            eprintln!("Ollama не запущена — живой тест пропущен");
+            return;
+        }
+
+        let attrs = UserAttributes {
+            title_hint: "Самокат детский Novatrack".into(),
+            condition: "хорошее, катались один сезон".into(),
+            price: "4500".into(),
+            defects: "потёртость на деке".into(),
+            ..Default::default()
+        };
+
+        let backend = service.resolve(&cfg).await.expect("бэкенд недоступен");
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let collector = tokio::spawn(async move {
+            let mut seen = 0usize;
+            while let Some(chunk) = rx.recv().await {
+                seen += chunk.len();
+            }
+            seen
+        });
+
+        let result = generate_listing(
+            &backend,
+            &cfg,
+            &ProductFacts::default(),
+            &attrs,
+            &GenerateOptions::default(),
+            &tx,
+        )
+        .await
+        .expect("генерация провалилась");
+        drop(tx);
+
+        let streamed = collector.await.unwrap();
+        eprintln!(
+            "заголовок: {}
+символов в описании: {}
+стримом пришло: {streamed}",
+            result.draft.title, result.description_chars
+        );
+        assert!(!result.draft.title.trim().is_empty(), "пустой заголовок");
+        assert!(result.description_chars > 100, "описание подозрительно короткое");
+        assert!(streamed > 0, "в поток не пришло ни одного символа");
     }
 }

@@ -50,6 +50,8 @@ pub struct ChatRequest {
     pub max_tokens: u32,
     /// Просим бэкенд гарантировать валидный JSON на выходе.
     pub json_mode: bool,
+    /// Управление «размышлениями» reasoning-моделей. `None` — не трогаем.
+    pub think: Option<bool>,
 }
 
 impl ChatRequest {
@@ -61,6 +63,7 @@ impl ChatRequest {
             top_p: 0.9,
             max_tokens: 1600,
             json_mode: false,
+            think: None,
         }
     }
 
@@ -77,6 +80,15 @@ impl ChatRequest {
 
     pub fn max_tokens(mut self, n: u32) -> Self {
         self.max_tokens = n;
+        self
+    }
+
+    /// Reasoning-модель без этого флага скармливает весь лимит токенов
+    /// размышлениям и до самого ответа не доходит. Нашим задачам — извлечь
+    /// факты по схеме и написать текст по шаблону — цепочка рассуждений
+    /// не нужна.
+    pub fn no_thinking(mut self) -> Self {
+        self.think = Some(false);
         self
     }
 }

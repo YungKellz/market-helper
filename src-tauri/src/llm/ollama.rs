@@ -42,6 +42,10 @@ struct ChatChunk {
 struct ChunkMessage {
     #[serde(default)]
     content: String,
+    /// Ollama 0.33 с qwen3-vl складывает сюда весь ответ, а `content`
+    /// оставляет пустым. Читаем оба поля и берём то, где что-то есть.
+    #[serde(default)]
+    thinking: String,
 }
 
 impl OllamaBackend {
@@ -150,16 +154,44 @@ impl OllamaBackend {
         if req.json_mode {
             body["format"] = json!("json");
         }
+        if let Some(think) = req.think {
+            body["think"] = json!(think);
+        }
         body
     }
 
-    pub async fn chat(&self, req: &ChatRequest) -> AppResult<String> {
+    /// Отправка с одной повторной попыткой: модели без поддержки размышлений
+    /// отвергают параметр `think` целиком, и это не повод падать.
+    async fn send(&self, req: &ChatRequest, stream: bool) -> AppResult<reqwest::Response> {
+        let mut body = self.body(req, stream);
         let resp = self
             .http
             .post(self.url("/api/chat"))
-            .json(&self.body(req, false))
+            .json(&body)
             .send()
             .await?;
+
+        if resp.status() != reqwest::StatusCode::BAD_REQUEST || body.get("think").is_none() {
+            return Ok(resp);
+        }
+
+        let text = resp.text().await.unwrap_or_default();
+        if !text.contains("think") {
+            return Err(AppError::Backend(format!("Ollama ответила 400: {text}")));
+        }
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("think");
+        }
+        Ok(self
+            .http
+            .post(self.url("/api/chat"))
+            .json(&body)
+            .send()
+            .await?)
+    }
+
+    pub async fn chat(&self, req: &ChatRequest) -> AppResult<String> {
+        let resp = self.send(req, false).await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -171,16 +203,14 @@ impl OllamaBackend {
         if let Some(err) = chunk.error {
             return Err(AppError::Backend(err));
         }
-        Ok(chunk.message.map(|m| m.content).unwrap_or_default())
+        Ok(chunk
+            .message
+            .map(|m| if m.content.is_empty() { m.thinking } else { m.content })
+            .unwrap_or_default())
     }
 
     pub async fn chat_stream(&self, req: &ChatRequest, sink: &TokenSink) -> AppResult<String> {
-        let resp = self
-            .http
-            .post(self.url("/api/chat"))
-            .json(&self.body(req, true))
-            .send()
-            .await?;
+        let resp = self.send(req, true).await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -189,7 +219,10 @@ impl OllamaBackend {
         }
 
         let mut stream = resp.bytes_stream();
-        let mut full = String::new();
+        // Копим content и thinking раздельно: смешивать их нельзя, иначе
+        // разбор JSON наткнётся на обрывок рассуждений вместо ответа.
+        let mut content = String::new();
+        let mut thinking = String::new();
         // Ollama отдаёт NDJSON, но TCP-чанк может разрезать строку пополам —
         // копим хвост до перевода строки.
         let mut buffer = String::new();
@@ -209,19 +242,25 @@ impl OllamaBackend {
                     return Err(AppError::Backend(err));
                 }
                 if let Some(msg) = chunk.message {
+                    // В превью шлём всё подряд: пользователю важно видеть, что
+                    // модель работает, а не какое это поле протокола.
+                    // Получатель мог отвалиться (окно закрыли) — это не ошибка
+                    // генерации, просто перестаём слать.
                     if !msg.content.is_empty() {
-                        full.push_str(&msg.content);
-                        // Получатель мог отвалиться (окно закрыли) — это не ошибка
-                        // генерации, просто перестаём слать.
+                        content.push_str(&msg.content);
                         let _ = sink.send(msg.content);
+                    }
+                    if !msg.thinking.is_empty() {
+                        thinking.push_str(&msg.thinking);
+                        let _ = sink.send(msg.thinking);
                     }
                 }
                 if chunk.done {
-                    return Ok(full);
+                    return Ok(if content.is_empty() { thinking } else { content });
                 }
             }
         }
-        Ok(full)
+        Ok(if content.is_empty() { thinking } else { content })
     }
 
     /// Скачивание модели с прогрессом. Сырые строки прогресса уходят в `sink`.
@@ -257,5 +296,59 @@ impl OllamaBackend {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::types::ChatMessage;
+
+    fn backend() -> OllamaBackend {
+        OllamaBackend::new(OllamaConfig::default())
+    }
+
+    /// Живой прогон против запущенной Ollama. Без неё тест молча проходит,
+    /// чтобы не ломать сборку на машине без движка.
+    #[tokio::test]
+    async fn live_chat_returns_parseable_json() {
+        let backend = backend();
+        if !backend.status().await.available {
+            eprintln!("Ollama не запущена — живой тест пропущен");
+            return;
+        }
+
+        let model = OllamaConfig::default().text_model;
+        if !backend
+            .installed_models()
+            .await
+            .unwrap_or_default()
+            .iter()
+            .any(|m| *m == model)
+        {
+            eprintln!("модель {model} не скачана — живой тест пропущен");
+            return;
+        }
+
+        let req = ChatRequest::new(
+            &model,
+            vec![
+                ChatMessage::system("Отвечай только валидным JSON без пояснений."),
+                ChatMessage::user("Верни {\"product_type\": \"стул\"}"),
+            ],
+        )
+        .sampling(0.1, 0.9)
+        .max_tokens(2048)
+        .json()
+        .no_thinking();
+
+        let raw = backend.chat(&req).await.expect("запрос к Ollama провалился");
+
+        // Ровно та регрессия, из-за которой распознавание падало: ответ уезжал
+        // в поле thinking, а мы читали только content и получали пустоту.
+        assert!(!raw.trim().is_empty(), "модель вернула пустой ответ");
+        let parsed: serde_json::Value =
+            serde_json::from_str(raw.trim()).unwrap_or_else(|e| panic!("не JSON: {e}\n{raw}"));
+        assert!(parsed.is_object(), "ожидался JSON-объект, получили {parsed}");
     }
 }
