@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Market Helper",
+  "productName": "Засечка",
   "version": "0.1.0",
-  "identifier": "ru.markethelper.app",
+  "identifier": "ru.zasechka.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Market Helper — описания для Авито",
+        "title": "Засечка — описания для Авито",
         "width": 1180,
         "height": 820,
         "minWidth": 940,
