@@ -85,6 +85,17 @@ export interface CustomAttribute {
   value: string;
 }
 
+/** Поля, значимые только для парфюмерии и косметики. */
+export interface BeautyAttributes {
+  origin: string;
+  scent_type: string;
+  scent_notes: string;
+  expiry: string;
+  sealed: string;
+  batch_code: boolean;
+  assortment: boolean;
+}
+
 export interface UserAttributes {
   title_hint: string;
   brand: string;
@@ -96,6 +107,7 @@ export interface UserAttributes {
   included: string;
   defects: string;
   reason_for_sale: string;
+  beauty: BeautyAttributes;
   custom: CustomAttribute[];
   notes: string;
 }
@@ -162,6 +174,15 @@ export const emptyAttributes = (): UserAttributes => ({
   included: "",
   defects: "",
   reason_for_sale: "",
+  beauty: {
+    origin: "",
+    scent_type: "",
+    scent_notes: "",
+    expiry: "",
+    sealed: "",
+    batch_code: false,
+    assortment: false,
+  },
   custom: [],
   notes: "",
 });

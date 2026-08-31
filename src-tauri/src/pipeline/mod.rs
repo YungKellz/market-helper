@@ -114,10 +114,31 @@ pub async fn generate_listing(
     opts: &GenerateOptions,
     sink: &TokenSink,
 ) -> AppResult<ListingResult> {
+    // Класс товара берём из наиболее надёжных полей: категория и тип, при
+    // расхождении подкреплённые брендом и моделью. Заполненный раздел
+    // парфюмерии/косметики — сам по себе однозначный сигнал.
+    let b = &attrs.beauty;
+    let beauty_filled = [&b.origin, &b.scent_type, &b.scent_notes, &b.expiry, &b.sealed]
+        .iter()
+        .any(|f| !f.trim().is_empty())
+        || b.batch_code
+        || b.assortment;
+    let class = if beauty_filled {
+        prompts::ProductClass::Beauty
+    } else {
+        prompts::ProductClass::classify(&[
+            &facts.category,
+            &facts.product_type,
+            &facts.brand,
+            &facts.model,
+            &attrs.title_hint,
+            &attrs.brand,
+        ])
+    };
     let req = ChatRequest::new(
         &cfg.ollama.text_model,
         vec![
-            ChatMessage::system(prompts::copy_system(cfg, opts)),
+            ChatMessage::system(prompts::copy_system(cfg, opts, class)),
             ChatMessage::user(prompts::copy_user(facts, attrs, opts, &cfg.seller)),
         ],
     )
@@ -141,10 +162,13 @@ pub async fn refine_listing(
     sink: &TokenSink,
 ) -> AppResult<ListingResult> {
     let current_text = format!("Заголовок: {}\n\n{}", current.title, current.description);
+    // При переделке фактов уже нет — класс восстанавливаем из самого текста,
+    // чтобы правка шла по тому же сценарию, что и первая генерация.
+    let class = prompts::ProductClass::classify(&[&current.title, &current.description]);
     let req = ChatRequest::new(
         &cfg.ollama.text_model,
         vec![
-            ChatMessage::system(prompts::copy_system(cfg, opts)),
+            ChatMessage::system(prompts::copy_system(cfg, opts, class)),
             ChatMessage::user(prompts::refine_user(&current_text, instruction)),
         ],
     )

@@ -47,10 +47,35 @@ pub struct UserAttributes {
     pub included: String,
     pub defects: String,
     pub reason_for_sale: String,
+    /// Поля, значимые только для парфюмерии и косметики. Для остальных товаров
+    /// остаются пустыми и в текст не попадают.
+    pub beauty: BeautyAttributes,
     /// Произвольные пары «характеристика — значение».
     pub custom: Vec<CustomAttribute>,
     /// Свободный текст: всё, что пользователь хочет донести.
     pub notes: String,
+}
+
+/// Специфика ниши парфюмерии/косметики (в первую очередь Victoria's Secret):
+/// то, что решает продажу здесь, но бессмысленно для техники или мебели.
+/// Всё опционально — пустое поле в описание не попадает.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BeautyAttributes {
+    /// Происхождение: «Оригинал, выкуплен в США», «Привезено из Европы».
+    pub origin: String,
+    /// Тип аромата: фруктово-цветочный, древесно-гурманский, сладкий ванильный.
+    pub scent_type: String,
+    /// Ноты аромата. Пирамиду можно записать текстом.
+    pub scent_notes: String,
+    /// Срок годности: «3 года», «до 2027».
+    pub expiry: String,
+    /// Состояние упаковки: «запечатан», «вскрыт», «тестер», «миниатюра».
+    pub sealed: String,
+    /// Продавец готов прислать фото батч-кода для проверки оригинальности.
+    pub batch_code: bool,
+    /// У продавца есть другие ароматы — приглашаем посмотреть профиль.
+    pub assortment: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -29,6 +29,11 @@ export default function AttributesForm({
   const setAttr = (key: keyof UserAttributes, value: string) =>
     onAttributesChange({ ...attributes, [key]: value });
 
+  const setBeauty = <K extends keyof UserAttributes["beauty"]>(
+    key: K,
+    value: UserAttributes["beauty"][K],
+  ) => onAttributesChange({ ...attributes, beauty: { ...attributes.beauty, [key]: value } });
+
   const setOption = <K extends keyof GenerateOptions>(key: K, value: GenerateOptions[K]) =>
     onOptionsChange({ ...options, [key]: value });
 
@@ -82,6 +87,83 @@ export default function AttributesForm({
           disabled={disabled}
         />
       </label>
+
+      <details style={{ marginTop: 14 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+          Парфюмерия и косметика
+        </summary>
+        <p className="hint" style={{ marginTop: 6, marginBottom: 10 }}>
+          Для мистов, лосьонов и духов. Здесь решает не состояние, а аромат,
+          оригинальность и свежесть — заполните, что знаете.
+        </p>
+        <div className="grid2">
+          <label className="field">
+            <span>Происхождение</span>
+            <input
+              value={attributes.beauty.origin}
+              onChange={(e) => setBeauty("origin", e.target.value)}
+              placeholder="Оригинал, выкуплен в США"
+              disabled={disabled}
+            />
+          </label>
+          <label className="field">
+            <span>Тип аромата</span>
+            <input
+              value={attributes.beauty.scent_type}
+              onChange={(e) => setBeauty("scent_type", e.target.value)}
+              placeholder="фруктово-цветочный"
+              disabled={disabled}
+            />
+          </label>
+          <label className="field">
+            <span>Срок годности</span>
+            <input
+              value={attributes.beauty.expiry}
+              onChange={(e) => setBeauty("expiry", e.target.value)}
+              placeholder="3 года"
+              disabled={disabled}
+            />
+          </label>
+          <label className="field">
+            <span>Упаковка</span>
+            <input
+              value={attributes.beauty.sealed}
+              onChange={(e) => setBeauty("sealed", e.target.value)}
+              placeholder="запечатан / тестер"
+              disabled={disabled}
+            />
+          </label>
+        </div>
+        <label className="field" style={{ marginTop: 10 }}>
+          <span>Ноты аромата</span>
+          <input
+            value={attributes.beauty.scent_notes}
+            onChange={(e) => setBeauty("scent_notes", e.target.value)}
+            placeholder="ваниль, яблоневый цвет, мускус"
+            disabled={disabled}
+          />
+        </label>
+        <div className="row" style={{ marginTop: 12, flexWrap: "wrap", gap: 14 }}>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={attributes.beauty.batch_code}
+              onChange={(e) => setBeauty("batch_code", e.target.checked)}
+              disabled={disabled}
+            />
+            Пришлю фото батч-кода по запросу
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={attributes.beauty.assortment}
+              onChange={(e) => setBeauty("assortment", e.target.checked)}
+              disabled={disabled}
+            />
+            Другие ароматы — в профиле
+          </label>
+        </div>
+      </details>
 
       {attributes.custom.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
