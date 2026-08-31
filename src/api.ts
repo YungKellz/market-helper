@@ -9,6 +9,7 @@ import type {
   ListingDraft,
   ListingResult,
   PhotoInfo,
+  PendingUpdate,
   ProductFacts,
   SetupProgress,
   SetupStatus,
@@ -80,3 +81,40 @@ export const startOllama = () => invoke<void>("start_ollama");
 /** Ход мастера первого запуска. */
 export const onSetupProgress = (handler: (p: SetupProgress) => void): Promise<UnlistenFn> =>
   listen<SetupProgress>("setup:progress", (e) => handler(e.payload));
+
+/**
+ * Проверка обновлений. Никогда не бросает: отсутствие сети или недоступный
+ * релиз — не повод показывать пользователю ошибку, он не просил проверять.
+ */
+export async function checkUpdate(): Promise<PendingUpdate | null> {
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    return (await check()) as PendingUpdate | null;
+  } catch {
+    return null;
+  }
+}
+
+/** Скачивает и ставит обновление, затем перезапускает приложение. */
+export async function installUpdate(
+  update: PendingUpdate,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  let total = 0;
+  let received = 0;
+
+  await update.downloadAndInstall((event) => {
+    if (event.event === "Started") {
+      total = event.data.contentLength ?? 0;
+      onProgress(0);
+    } else if (event.event === "Progress") {
+      received += event.data.chunkLength;
+      if (total > 0) onProgress(Math.min(100, Math.round((received / total) * 100)));
+    } else if (event.event === "Finished") {
+      onProgress(100);
+    }
+  });
+
+  const { relaunch } = await import("@tauri-apps/plugin-process");
+  await relaunch();
+}

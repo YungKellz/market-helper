@@ -190,3 +190,20 @@ export interface SetupProgress {
   percent: number | null;
   done: boolean;
 }
+
+/**
+ * То, что возвращает плагин обновлений. Описываем структурно, а не импортом
+ * типа плагина: иначе тип протёк бы во все компоненты через цепочку импортов.
+ */
+export interface PendingUpdate {
+  version: string;
+  currentVersion: string;
+  downloadAndInstall: (
+    onEvent: (
+      event:
+        | { event: "Started"; data: { contentLength?: number } }
+        | { event: "Progress"; data: { chunkLength: number } }
+        | { event: "Finished" },
+    ) => void,
+  ) => Promise<void>;
+}

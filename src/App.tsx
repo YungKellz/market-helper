@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   analyzePhotos,
   backendStatus,
+  checkUpdate,
   errorText,
   generateListing,
   getConfig,
@@ -19,6 +20,7 @@ import ResultPanel from "./components/ResultPanel";
 import SettingsDialog from "./components/SettingsDialog";
 import SetupWizard from "./components/SetupWizard";
 import StatusBar from "./components/StatusBar";
+import UpdateBanner from "./components/UpdateBanner";
 import {
   defaultOptions,
   emptyAttributes,
@@ -27,6 +29,7 @@ import {
   type GenerateOptions,
   type ListingResult,
   type PhotoInfo,
+  type PendingUpdate,
   type ProductFacts,
   type SetupStatus,
   type UserAttributes,
@@ -40,6 +43,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [update, setUpdate] = useState<PendingUpdate | null>(null);
 
   const [photos, setPhotos] = useState<PhotoInfo[]>([]);
   const [hint, setHint] = useState("");
@@ -78,6 +82,9 @@ export default function App() {
     refreshSetup()
       .then((s) => setWizardOpen(s.needs_setup))
       .catch((e) => setError(errorText(e)));
+    // Тихо: пользователь не просил проверять обновления, поэтому неудача
+    // проверки не должна попадать ему на глаза.
+    void checkUpdate().then(setUpdate);
   }, [refreshStatuses, refreshSetup]);
 
   function pushResult(next: ListingResult) {
@@ -205,6 +212,8 @@ export default function App() {
         }}
         onOpenSettings={() => setSettingsOpen(true)}
       />
+
+      {update && <UpdateBanner update={update} onDismiss={() => setUpdate(null)} />}
 
       {/* Полосой во всю ширину, а не внутри колонки: раньше баннер жил над
           блоком с фото и при прокрутке уезжал из виду — сбой генерации

@@ -610,3 +610,17 @@ button.ghost.fix {
   background: var(--bg-panel);
   flex: none;
 }
+
+/* Полоса обновления — рядом с полосой ошибки, тем же приёмом: во всю ширину
+   под шапкой, чтобы не зависеть от прокрутки колонок. */
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: none;
+}
