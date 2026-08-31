@@ -11,11 +11,11 @@
  * пустой пароль передать нельзя вообще: сборка доходит до подписи и молча
  * виснет на приглашении ввода. Node пустое значение держит.
  *
- * Почему артефакты переименовываются. Продукт называется «Засечка», и Tauri
- * именует файлы кириллицей. GitHub заменяет в именах вложений всё, кроме
- * латиницы, цифр, точки, дефиса и подчёркивания, — ссылка в latest.json
- * перестала бы совпадать с настоящим адресом, и обновление молча не
- * находилось бы.
+ * Почему артефакты переименовываются. Tauri берёт имя файла из productName,
+ * а там пробел: «Caption Craft_0.1.0_x64-setup.exe». GitHub заменяет во
+ * вложениях всё, кроме латиницы, цифр, точки, дефиса и подчёркивания, —
+ * пробел стал бы точкой, ссылка в latest.json перестала бы совпадать
+ * с настоящим адресом, и обновление молча не находилось бы.
  *
  * Что именно скачивает обновлятор. В Tauri v2 артефакт обновления для NSIS —
  * это сам файл установщика и подпись рядом с ним, а не отдельный архив.
@@ -32,8 +32,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const KEY_PATH = join(homedir(), ".tauri", "zasechka-updater.key");
-const SLUG = "zasechka";
+const KEY_PATH = join(homedir(), ".tauri", "caption-craft-updater.key");
+const SLUG = "caption-craft";
 const REPO = "YungKellz/market-helper";
 
 function fail(message) {

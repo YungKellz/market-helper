@@ -31,7 +31,7 @@ export default function StatusBar({
 }: Props) {
   return (
     <div className="topbar">
-      <h1>Засечка</h1>
+      <h1>Caption Craft</h1>
       <span className="hint">описания карточек для Авито</span>
       <div className="spacer" />
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Засечка",
+  "productName": "Caption Craft",
   "version": "0.1.0",
-  "identifier": "ru.zasechka.app",
+  "identifier": "ru.captioncraft.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Засечка — описания для Авито",
+        "title": "Caption Craft",
         "width": 1180,
         "height": 820,
         "minWidth": 940,
